@@ -33,7 +33,8 @@ function Invoke-VidDownloadRepoFile {
 
 # GitHub is the only source for the engine, and direct github.com gives ~0.03-0.1 MB/s here
 # while a 6-connection pull through a proxy gave 0.74 MB/s. So: sample each route for a few
-# seconds, keep the winner, and remember it in ghroute.txt next to the download.
+# seconds, keep the winner, and remember it in ghroute.txt next to the download. Only routes
+# that answer Range with a total size are eligible - see Measure-VidRoute.
 function Get-VidGithubProxies { return @('https://gh-proxy.com/', 'https://gh-proxy.net/', 'https://ghfast.top/') }
 
 function Measure-VidRoute([string]$Url, [int]$Seconds = 5) {
@@ -43,7 +44,15 @@ function Measure-VidRoute([string]$Url, [int]$Seconds = 5) {
     $req.Timeout = 12000
     $req.ReadWriteTimeout = 10000
     $req.UserAgent = 'video-tuner'
+    # Only a route that honors Range AND reports the total can feed the segmented
+    # downloader. A fast proxy that hides Content-Length silently drops all .part files
+    # and resumes a stale stub instead - reject it here, not after 2 GB of work.
+    $req.AddRange(0, 67108863)
     $resp = $req.GetResponse()
+    if ([int]$resp.StatusCode -ne 206) { $resp.Close(); return 0 }
+    $cr = ''
+    try { $cr = [string]$resp.Headers['Content-Range'] } catch {}
+    if ($cr -notmatch '/(\d+)\s*$') { $resp.Close(); return 0 }
     $rs = $resp.GetResponseStream()
     $buf = New-Object byte[] 262144
     $total = [long]0

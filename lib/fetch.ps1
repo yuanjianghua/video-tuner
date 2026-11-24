@@ -44,8 +44,11 @@ function Invoke-VidDownload {
       }
       $rs.Close(); $rs = $null; $fs.Close(); $fs = $null; $resp.Close(); $resp = $null
       $size = (Get-Item $OutFile).Length
-      if ($size -gt 0 -and ($total -lt 0 -or $size -ge $total)) { return $true }
-      Write-VidLog ('    incomplete (' + [math]::Round($size / 1MB) + '/' + [math]::Round($total / 1MB) + 'MB), will resume')
+      # Never claim success on an unknown-length reply. A proxy that hides Content-Length
+      # can end early; accepting that used to hand a 16MB stub to tar.exe as if complete.
+      if ($size -gt 0 -and $total -gt 0 -and $size -ge $total) { return $true }
+      $known = if ($total -gt 0) { [math]::Round($total / 1MB) + 'MB' } else { 'unknown size' }
+      Write-VidLog ('    incomplete (' + [math]::Round($size / 1MB) + 'MB/' + $known + '), will resume')
     } catch {
       Write-VidLog ('    stalled: ' + $_.Exception.Message)
     } finally {
