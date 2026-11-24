@@ -9,6 +9,10 @@ function Get-VidTierIndexById([string]$Id) {
   return -1
 }
 function Get-VidEngineBaseUrl([int]$Port) { return ('http://127.0.0.1:' + $Port) }
+# /queue items are [number, prompt_id, ...] - index 1 is the id; index 0 is only the queue number.
+function Get-VidBusyPromptIds([object]$Queue) {
+  return @(@($Queue.queue_running) + @($Queue.queue_pending) | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_[1] })
+}
 
 function Test-VidEngineHealth([int]$Port) {
   try {
@@ -38,8 +42,7 @@ function Start-VidEngine {
   throw ('engine did not answer /system_stats within 120s - check the ComfyUI console window')
 }
 
-# Distill loras are OPTIONAL speed hardware for the 14B dual graph. Both-or-nothing:
-# returns empty pair when tier is not 14B or files missing (caller falls back to native 20-step).
+# Distill loras are OPTIONAL 14B speed hardware: both-or-nothing, missing -> native 20-step.
 function Select-VidLoraForTier([object]$Tier, [object]$Inv) {
   if ($Tier.Kind -ne 'wan22-t2v') { return @{ High = ''; Low = '' } }
   if (-not $Inv.PSObject.Properties['Loras'] -or -not @($Inv.Loras).Count) { return @{ High = ''; Low = '' } }
@@ -141,9 +144,7 @@ function Invoke-VidValidationRun {
     Start-Sleep -Seconds 5
     $q = $null
     try { $q = Invoke-RestMethod ($base + '/queue') -TimeoutSec 10 } catch { continue }
-    # ComfyUI /queue returns queue_running + queue_pending (NOT running/pending); a null
-    # field piped into ForEach-Object yields one null element, and $_[0] then throws.
-    $busy = @(@($q.queue_running) + @($q.queue_pending) | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_[0] })
+    $busy = @(Get-VidBusyPromptIds $q)
     if ($busy -notcontains $pid_) {
       try {
         $h = Invoke-RestMethod ($base + '/history/' + $pid_) -TimeoutSec 10
@@ -210,8 +211,7 @@ function Invoke-VidValidatePlan {
   return @{ Ok = $false; Tier = $null; Attempts = $attempts; Seconds = 0 }
 }
 
-# Real generation at the validated tier's full settings. Reuses the same runner; timeout is
-# hours because on an 8GB card a 14B clip honestly takes hours (we say so, we do not hide it).
+# Full generation at validated settings; hours-long timeout because 14B honestly takes hours.
 function Start-VidFullGeneration {
   param([object]$Plan, [object]$Inv, [string]$Prompt, [int]$Port = 8188, [int]$TimeoutSec = 21600)
   $t = $Plan.Pick

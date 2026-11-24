@@ -67,6 +67,14 @@ try {
   $vr0 = Invoke-VidValidatePlan -Plan $fakePlan -Inv $emptyInv
   Assert-Ok ((-not $vr0.Ok) -and ($vr0.Attempts.Count -eq 1)) 'validate with no models reports failed attempt, no null-index crash'
 
+  # ComfyUI /queue items are [number, prompt_id, ...]; reading index 0 made long jobs look vanished.
+  $runJob = [object[]]@(7, 'pid-running', @{}, @{})
+  $pendJob = [object[]]@(8, 'pid-pending', @{}, @{})
+  $runArr = [object[]]::new(1); $runArr[0] = $runJob
+  $pendArr = [object[]]::new(1); $pendArr[0] = $pendJob
+  $fakeQueue = [pscustomobject]@{ queue_running = $runArr; queue_pending = $pendArr }
+  Assert-Ok ((@(Get-VidBusyPromptIds $fakeQueue) -join ',') -eq 'pid-running,pid-pending') 'queue prompt id read from index 1, not queue number'
+
   # ---------- workflows: structural rules ----------
   Assert-Throws { New-VidWorkflowT2V -CkptName '' -ClipName c -VaeName v -Prompt p } 'empty ckpt name rejected'
   Assert-Throws { New-VidWorkflowT2V -CkptName a.gguf -ClipName c -VaeName v -Prompt p -Frames 80 } 'frames 80 rejected ((n-1)%4 rule)'
