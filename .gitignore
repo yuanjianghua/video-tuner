@@ -1,6 +1,8 @@
 # local artifacts, never commit
 config.json
 tuning_report.txt
+start_video_engine.cmd
+stop_video_engine.cmd
 runtime/
 ComfyUI/
 output/
