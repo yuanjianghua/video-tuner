@@ -7,6 +7,7 @@
 # Usage:  tune.cmd                                   full flow: detect, install if needed, validate, launchers
 #         tune.ps1 -SkipValidate                     plan only, never touch a running engine
 #         tune.ps1 -Generate -Prompt "..."           generate a clip at the validated tier (HOURS, see report)
+#         tune.ps1 -Compose -Prompt "..."            N x 3s 720p clips -> merge -> Chinese voiceover
 #         tune.ps1 -Force                            revalidate even if the cache matches hardware+model
 param(
   [string]$EngineDir = '',
@@ -17,6 +18,9 @@ param(
   [switch]$NoDownload,
   [switch]$Force,
   [switch]$Generate,
+  [switch]$Compose,
+  [int]$Clips = 3,
+  [string]$Narration = '',
   [switch]$CpuOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -95,7 +99,15 @@ try {
   $gpuSig = $gpu.Sig
   $state = Read-VidState $root
   $cached = Test-VidPlanFresh $state $gpuSig $ready.Model $ready.Res
-  if ($Generate) {
+  if ($Compose) {
+    Start-VidEngine -EngineRoot $engineRoot -Port $Port -VramMB ([int]$gpu.TotalMB) | Out-Null
+    if (-not $Prompt) { throw '-Compose needs -Prompt "..."' }
+    $speech = if ($Narration) { $Narration } else { Get-VidDefaultNarration }
+    Write-VidLog ('compose: ' + $Clips + ' x 3s clips at 1280x720 + zh voiceover (ffmpeg + SAPI)')
+    $cr = Invoke-VidCompose -Root $root -EngineRoot $engineRoot -Inv $inv -Tier $ready `
+        -Prompt $Prompt -Narration $speech -ClipCount $Clips -Port $Port
+    Write-VidLog ('compose output: ' + $cr.Output)
+  } elseif ($Generate) {
     Start-VidEngine -EngineRoot $engineRoot -Port $Port -VramMB ([int]$gpu.TotalMB) | Out-Null
     if (-not $cached -and -not $SkipValidate) {
       Write-VidLog 'no validated plan for this hardware+model: validating first (a real generation is cheaper to lose than hours)...'

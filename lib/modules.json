@@ -12,6 +12,7 @@
     { "name": "net",       "file": "net.ps1",       "deps": ["common", "fetch"] },
     { "name": "install",   "file": "install.ps1",   "deps": ["common", "discover", "net"] },
     { "name": "validate",  "file": "validate.ps1",  "deps": ["common", "plan", "workflows"] },
-    { "name": "launcher",  "file": "launcher.ps1",  "deps": ["common"] }
+    { "name": "launcher",  "file": "launcher.ps1",  "deps": ["common"] },
+    { "name": "compose",   "file": "compose.ps1",   "deps": ["common", "validate", "workflows"] }
   ]
 }

@@ -98,6 +98,19 @@ try {
     Assert-Ok ($wfD[$svk].inputs['format'] -eq 'auto' -and $wfD[$svk].inputs['codec'].codec -eq 'auto') 'dual workflow SaveVideo has format+codec from official template'
   }
 
+  # ---------- compose: storyboard + concat list ----------
+  $tl = @(New-VidComposeTimeline -ClipCount 3 -Prompt 'cat')
+  Assert-Ok ($tl.Count -eq 3) 'compose timeline makes 3 clips'
+  Assert-Ok ((@($tl | ForEach-Object { $_.Seed }) -join ',') -eq '42,143,244') 'compose clips use distinct seeds'
+  Assert-Ok ($tl[0].Frames -eq 49 -and $tl[0].Width -eq 1280 -and $tl[0].Height -eq 720 -and $tl[0].Steps -eq 12) 'compose clip is 3s 720p / 12 steps'
+  Assert-Throws { New-VidComposeTimeline -ClipCount 1 -Prompt 'cat' } 'compose rejects a 1-clip story'
+  Assert-Ok ((Get-VidDefaultNarration).Length -gt 10) 'default zh narration is present'
+  $seedA = Get-VidRunSeed ([datetime]'2026-11-25 05:00:00')
+  $seedB = Get-VidRunSeed ([datetime]'2026-11-25 05:00:01')
+  Assert-Ok ($seedA -ne $seedB -and $seedA -ge 0 -and $seedB -ge 0) 'compose run seed changes with time (defeats ComfyUI cache)'
+  $concat = New-VidConcatList @('C:\a.mp4', 'C:\b.mp4')
+  Assert-Ok ($concat -match "file 'C:\\a\.mp4'" -and $concat -match "file 'C:\\b\.mp4'") 'ffmpeg concat list quotes each clip'
+
   # ---------- checkpoint selection by tier.Kind ----------
   $fakeInv = [pscustomobject]@{
     Checkpts = @(

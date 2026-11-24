@@ -34,6 +34,7 @@ One-click text-to-video auto-tuner: detects your hardware, picks a runnable mode
 2. **双击 `tune.cmd`**：自动完成 装引擎(约2GB压缩包，解压后约15GB) → 下模型(10-25GB，优先 ModelScope/HF 镜像) → 真实小规模生成验证 → 生成 `start_video_engine.cmd` / `stop_video_engine.cmd` 和桌面快捷方式。
 3. **之后日常**：双击桌面「启动VideoEngine」打开 ComfyUI 网页界面；命令行生成一条片段：
    `powershell -File tune.ps1 -Generate -Prompt "一只橘猫在窗台上打哈欠，阳光，纪录片风格"`
+4. **完整小短片（多段+配音）**：`tune.ps1 -Compose -Prompt "..."`，默认 3 段 3 秒 720p，自动合并并加中文旁白，输出 `output\vidtuner_story_*.mp4`。
 
 ## 参数
 
@@ -42,6 +43,7 @@ tune.ps1                        # 全流程（已验证过则秒复用）
 tune.ps1 -SkipValidate          # 只看计划，不启动任何东西（绝不碰正在运行的引擎）
 tune.ps1 -Force                 # 硬件/模型没变也重新实测
 tune.ps1 -Generate -Prompt "..."  # 按已验证档位生成一条完整片段（几十分钟起，见上表）
+tune.ps1 -Compose -Prompt "..."  # 3 段 3 秒 720p + 合并 + 中文配音；-Clips N 改段数，-Narration 改旁白
 tune.ps1 -EngineDir D:\x        # 指定已有 ComfyUI 便携版
 tune.ps1 -NoDownload            # 全离线：只报告现状
 ```
@@ -53,6 +55,7 @@ tune.ps1 -NoDownload            # 全离线：只报告现状
 - **提示缺节点（UnetLoaderGGUF 等）**：工具会自动装 ComfyUI-GGUF 节点包；离线环境按其打印的手动指引放置即可。
 - **第一次生成特别慢**：16GB 内存机型权重首过走 NVMe 页缓存，第二次起会快。
 - **画面糊/动得像幻灯片**：这是 1.3B/5B 档位的真实能力上限，不是坏了。想要宣传片级效果需要 14B 档 + 32GB 内存 + 更多耐心。
+- **`-Compose` 配音没声音/合并报错**：配音用 Windows 自带中文 SAPI 语音（需系统装有 zh-CN 语音，本机为 Microsoft Huihui）；合并需要 PATH 里有 `ffmpeg`（本机 winget 安装的 Gyan.FFmpeg 可用）。每段 3 秒 720p 约 15 分钟，默认 3 段约 45 分钟。
 
 ## 原理一句话
 
@@ -60,8 +63,9 @@ tune.ps1 -NoDownload            # 全离线：只报告现状
 
 ## Status
 
-- [x] 档位阶梯 / 工作流构建 / 下载器 / 验证降档 / 一键脚本 —— 离线测试 135 项全绿（arch 60 + smoke 75）
+- [x] 档位阶梯 / 工作流构建 / 下载器 / 验证降档 / 一键脚本 / 多段合并配音 —— 离线测试 146 项全绿（arch 64 + smoke 82）
 - [x] 真实机器端到端实测（2026-11-25，详见下方与 `tuning_report.txt`）
+- [x] `-Compose` 完整小短片：3 段 720p 短片 → ffmpeg 合并 → 中文 SAPI 旁白（本机已验证 TTS+合并出片）
 
 ### 真机实测（2026-11-25）
 
