@@ -8,7 +8,9 @@
     { "name": "state",     "file": "state.ps1",     "deps": [] },
     { "name": "workflows", "file": "workflows.ps1", "deps": [], "pure": true },
     { "name": "discover",  "file": "discover.ps1",  "deps": ["workflows"] },
-    { "name": "install",   "file": "install.ps1",   "deps": ["common", "discover"] },
+    { "name": "fetch",     "file": "fetch.ps1",     "deps": ["common"] },
+    { "name": "net",       "file": "net.ps1",       "deps": ["common", "fetch"] },
+    { "name": "install",   "file": "install.ps1",   "deps": ["common", "discover", "net"] },
     { "name": "validate",  "file": "validate.ps1",  "deps": ["common", "plan", "workflows"] },
     { "name": "launcher",  "file": "launcher.ps1",  "deps": ["common"] }
   ]
