@@ -31,7 +31,7 @@ One-click text-to-video auto-tuner: detects your hardware, picks a runnable mode
 ## 怎么用（小白三步）
 
 1. **先解压**：下载 zip 后必须“全部解压”到文件夹，不要在压缩文件预览里直接双击运行。
-2. **双击 `tune.cmd`**：自动完成 装引擎(约3GB) → 下模型(10-25GB，走 hf-mirror 镜像) → 真实小规模生成验证 → 生成 `start_video_engine.cmd` / `stop_video_engine.cmd` 和桌面快捷方式。
+2. **双击 `tune.cmd`**：自动完成 装引擎(约2GB压缩包，解压后约15GB) → 下模型(10-25GB，优先 ModelScope/HF 镜像) → 真实小规模生成验证 → 生成 `start_video_engine.cmd` / `stop_video_engine.cmd` 和桌面快捷方式。
 3. **之后日常**：双击桌面「启动VideoEngine」打开 ComfyUI 网页界面；命令行生成一条片段：
    `powershell -File tune.ps1 -Generate -Prompt "一只橘猫在窗台上打哈欠，阳光，纪录片风格"`
 
@@ -48,7 +48,7 @@ tune.ps1 -NoDownload            # 全离线：只报告现状
 
 ## 常见问题
 
-- **GitHub 下载慢/断**：引擎包会重试 3 次；仍失败就去 releases 页手动下载 `.7z` 解压，`-EngineDir` 指过去。模型全部走 hf-mirror.com 镜像，国内直连。
+- **GitHub 下载慢/断**：引擎包 8 段并行 + 每段断点续传，失败会重试并切换线路；仍失败就去 releases 页手动下载 `.7z` 解压，`-EngineDir` 指过去。模型优先 ModelScope，其次 HF 镜像。
 - **验证时 CUDA OOM**：关掉浏览器和游戏重跑；工具会自动降档（T2→T1→T0），全失败会打印每档失败原因。
 - **提示缺节点（UnetLoaderGGUF 等）**：工具会自动装 ComfyUI-GGUF 节点包；离线环境按其打印的手动指引放置即可。
 - **第一次生成特别慢**：16GB 内存机型权重首过走 NVMe 页缓存，第二次起会快。
@@ -60,7 +60,7 @@ tune.ps1 -NoDownload            # 全离线：只报告现状
 
 ## Status
 
-- [x] 档位阶梯 / 工作流构建 / 下载器 / 验证降档 / 一键脚本 —— 离线测试 115 项全绿（arch 51 + smoke 64）
+- [x] 档位阶梯 / 工作流构建 / 下载器 / 验证降档 / 一键脚本 —— 离线测试 127 项全绿（arch 59 + smoke 68）
 - [ ] 真实机器端到端实测数据（进行中，见 `tuning_report.txt`，完成后回填本表）
 - [ ] 图生视频（TI2V 的 I 模式）：v1 未含，后续版本
 - [ ] 多显卡：未做（llama-tuner 也仅单机单卡实测过，同声明）
