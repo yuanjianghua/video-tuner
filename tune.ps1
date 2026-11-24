@@ -57,6 +57,9 @@ try {
     $engineRoot = Install-VidEngine $root
   }
   Write-VidLog ('engine: ' + $engineRoot)
+  # GGUF weights are our default path at 8GB VRAM, so the GGUF node pack must exist.
+  # Skip only on a fully offline dry run (-SkipValidate -NoDownload).
+  if (-not ($SkipValidate -and $NoDownload)) { Install-VidGgufPack $engineRoot | Out-Null }
 
   # 3. plan by hardware (pure), then intersect with what is actually on disk
   $plan = Get-VidPlan -VramMB ([int]$gpu.TotalMB) -RamMB ([int]$ramMB) -CommitFreeMB ([int]$mem.CommitFreeMB)

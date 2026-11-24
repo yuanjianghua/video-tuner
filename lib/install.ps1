@@ -73,6 +73,30 @@ function Install-VidEngine([string]$root) {
   return $dest
 }
 
+# ComfyUI-GGUF custom node pack: REQUIRED whenever we load GGUF weights. Idempotent.
+# Installed as plain zip (bare machines have no git); needs no pip deps on recent portables
+# (they bundle the 'gguf' python package). If nodes still fail to load, the probe in tune.ps1
+# says exactly which class is missing instead of pretending.
+function Install-VidGgufPack([string]$engineRoot) {
+  $cn = Join-Path $engineRoot 'ComfyUI\custom_nodes\ComfyUI-GGUF'
+  if (Test-Path (Join-Path $cn '__init__.py')) { return $cn }
+  Write-VidLog 'installing ComfyUI-GGUF custom node pack (needed for GGUF weights)...'
+  $tmp = Join-Path $engineRoot 'runtime\dl'
+  $z = Join-Path $tmp 'ComfyUI-GGUF.zip'
+  if (-not (Invoke-VidDownload 'https://codeload.github.com/city96/ComfyUI-GGUF/zip/refs/heads/main' $z 600)) {
+    throw 'cannot fetch ComfyUI-GGUF. Manual: download zip from github.com/city96/ComfyUI-GGUF, unpack into ComfyUI\custom_nodes\ComfyUI-GGUF'
+  }
+  $ex = Join-Path $tmp 'ggufpack'
+  if (Test-Path $ex) { Remove-Item $ex -Recurse -Force }
+  Expand-Archive $z -DestinationPath $ex -Force
+  $inner = @(Get-ChildItem $ex -Directory | Where-Object { Test-Path (Join-Path $_.FullName '__init__.py') }) | Select-Object -First 1
+  if (-not $inner) { throw 'ComfyUI-GGUF zip layout unexpected' }
+  New-Item -ItemType Directory -Force -Path (Split-Path $cn -Parent) | Out-Null
+  Copy-Item (Join-Path $inner.FullName '*') $cn -Recurse -Force
+  Write-VidLog ('  installed to ' + $cn)
+  return $cn
+}
+
 # Grounded manifests (repo+path verified against repo listings 2026-11-24).
 # VAE pairing is NOT interchangeable: 5B/ti2v uses wan2.2 vae; 14B and 1.3B use wan_2.1 vae.
 function Get-VidModelManifest([string]$modelKey) {
