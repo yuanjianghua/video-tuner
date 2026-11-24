@@ -65,7 +65,8 @@ function New-VidWorkflowT2V {
   } }
   $g['9']  = @{ class_type = 'VAEDecode'; inputs = @{ samples = @('8', 0); vae = @('3', 0) } }
   $g['10'] = @{ class_type = 'CreateVideo'; inputs = @{ images = @('9', 0); fps = $Fps } }
-  $g['11'] = @{ class_type = 'SaveVideo'; inputs = @{ video = @('10', 0); filename_prefix = 'vidtuner' } }
+  # SaveVideo requires format (ComfyUI v0.46 schema); official templates use auto + auto codec.
+  $g['11'] = @{ class_type = 'SaveVideo'; inputs = @{ video = @('10', 0); filename_prefix = 'vidtuner'; format = 'auto'; codec = @{ codec = 'auto' } } }
   return $g
 }
 
@@ -132,7 +133,7 @@ function New-VidWorkflowWan22Dual {
   } }
   $g['14'] = @{ class_type = 'VAEDecode'; inputs = @{ samples = @('13', 0); vae = @('8', 0) } }
   $g['15'] = @{ class_type = 'CreateVideo'; inputs = @{ images = @('14', 0); fps = $Fps } }
-  $g['16'] = @{ class_type = 'SaveVideo'; inputs = @{ video = @('15', 0); filename_prefix = 'vidtuner' } }
+  $g['16'] = @{ class_type = 'SaveVideo'; inputs = @{ video = @('15', 0); filename_prefix = 'vidtuner'; format = 'auto'; codec = @{ codec = 'auto' } } }
   return $g
 }
 

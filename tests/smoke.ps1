@@ -81,6 +81,15 @@ try {
   $gg = @(Get-VidGgufNodes)
   Assert-Ok (@((Get-VidCoreNodes) | Where-Object { $gg -contains $_ }).Count -eq 0) 'core and gguf node sets are disjoint'
 
+  # ComfyUI v0.46 SaveVideo has a REQUIRED format input; missing it kills a real run at the last node.
+  foreach ($svk in @($wf.Keys | Where-Object { $wf[$_].class_type -eq 'SaveVideo' })) {
+    Assert-Ok ($wf[$svk].inputs['format'] -eq 'auto' -and $wf[$svk].inputs['codec'].codec -eq 'auto') 'single workflow SaveVideo has format+codec from official template'
+  }
+  $wfD = New-VidWorkflowWan22Dual -CkptHigh 'h.gguf' -CkptLow 'l.gguf' -ClipName 'c' -VaeName 'v' -Prompt 'cat'
+  foreach ($svk in @($wfD.Keys | Where-Object { $wfD[$_].class_type -eq 'SaveVideo' })) {
+    Assert-Ok ($wfD[$svk].inputs['format'] -eq 'auto' -and $wfD[$svk].inputs['codec'].codec -eq 'auto') 'dual workflow SaveVideo has format+codec from official template'
+  }
+
   # ---------- checkpoint selection by tier.Kind ----------
   $fakeInv = [pscustomobject]@{
     Checkpts = @(
