@@ -61,6 +61,12 @@ try {
   Assert-Ok ((Get-VidTierIndexById 'T2') -eq 2) 'tier index by Id works across Get-VidTiers calls'
   Assert-Ok ((Get-VidTierIndexById 'NOPE') -eq -1) 'unknown tier Id = -1'
 
+  # missing model = a failed attempt, not a crash on a null tier array
+  $emptyInv = [pscustomobject]@{ Checkpts=@(); Clips=@(); Vaes=@(); Ready=@() }
+  $fakePlan = [pscustomobject]@{ Pick = ([pscustomobject]@{ Id = 'T0' }) }
+  $vr0 = Invoke-VidValidatePlan -Plan $fakePlan -Inv $emptyInv
+  Assert-Ok ((-not $vr0.Ok) -and ($vr0.Attempts.Count -eq 1)) 'validate with no models reports failed attempt, no null-index crash'
+
   # ---------- workflows: structural rules ----------
   Assert-Throws { New-VidWorkflowT2V -CkptName '' -ClipName c -VaeName v -Prompt p } 'empty ckpt name rejected'
   Assert-Throws { New-VidWorkflowT2V -CkptName a.gguf -ClipName c -VaeName v -Prompt p -Frames 80 } 'frames 80 rejected ((n-1)%4 rule)'

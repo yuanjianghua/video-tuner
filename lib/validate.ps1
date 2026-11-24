@@ -176,11 +176,11 @@ function Test-VidErrorIsMemory([string]$Err) {
   return ($Err -imatch 'out of memory|OOM|CUDA|allocat|page file|commit')
 }
 
-# Full loop: try planned tier; on memory failure walk the downgrade ladder.
-# Returns @{ Ok; Tier; Attempts; Seconds }. Caller owns engine lifecycle.
+# Try planned tier; on memory failure walk the ladder. Returns @{ Ok; Tier; Attempts; Seconds }.
 function Invoke-VidValidatePlan {
   param([object]$Plan, [object]$Inv, [string]$EngineRoot, [int]$Port = 8188,
         [bool]$StopEngineAfter = $false, [int]$TimeoutSec = 1800)
+  $tiers = Get-VidTiers
   $idx = Get-VidTierIndexById $plan.Pick.Id
   if ($idx -lt 0) { throw 'plan tier missing from ladder' }
   $candidates = @($idx) + @(Get-VidDowngradeOrder $idx)
