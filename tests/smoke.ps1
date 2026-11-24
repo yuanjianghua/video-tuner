@@ -111,6 +111,15 @@ try {
   $concat = New-VidConcatList @('C:\a.mp4', 'C:\b.mp4')
   Assert-Ok ($concat -match "file 'C:\\a\.mp4'" -and $concat -match "file 'C:\\b\.mp4'") 'ffmpeg concat list quotes each clip'
 
+  # ---------- workflow JSON is persisted for reproduction ----------
+  $wfDir = Join-Path $env:TEMP ('vidtuner_wf_' + [guid]::NewGuid().ToString('N'))
+  $wfOne = @{ '1' = @{ class_type = 'UNETLoader'; inputs = @{ unet_name = 'unit.gguf' } } }
+  $savedWf = Save-VidWorkflowJson -Workflow $wfOne -Dir $wfDir -Tag 'unittest' -ClientId 'fixed-client'
+  Assert-Ok (Test-Path $savedWf) 'workflow json is saved to disk'
+  $wfJson = Get-Content $savedWf -Raw | ConvertFrom-Json
+  Assert-Ok ($wfJson.client_id -eq 'fixed-client' -and $wfJson.prompt.'1'.class_type -eq 'UNETLoader') 'saved workflow keeps API prompt + client id'
+  Remove-Item $wfDir -Recurse -Force
+
   # ---------- checkpoint selection by tier.Kind ----------
   $fakeInv = [pscustomobject]@{
     Checkpts = @(

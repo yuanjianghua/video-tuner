@@ -38,7 +38,7 @@ function New-VidConcatList {
 
 function Invoke-VidClipBatch {
   param([object[]]$Timeline, [object]$Tier, [object]$Inv, [string]$OutputDir,
-        [int]$Port = 8188, [int]$TimeoutSec = 7200)
+        [int]$Port = 8188, [int]$TimeoutSec = 7200, [string]$WorkflowDir = '')
   $ck = @(Select-VidCkptForTier $Tier $Inv)
   if (-not $ck.Count) { throw ('no checkpoint for tier ' + $Tier.Id) }
   if (-not $Inv.Clips.Count) { throw 'text encoder missing' }
@@ -53,7 +53,7 @@ function Invoke-VidClipBatch {
       -Kind $Tier.Kind -Prompt $spec.Prompt -Width $spec.Width -Height $spec.Height `
       -Frames $spec.Frames -Steps $spec.Steps -Cfg $Tier.Cfg -Shift $Tier.Shift -Fps $Tier.Fps `
       -Seed $spec.Seed -Sampler $Tier.Sampler
-    $res = Invoke-VidValidationRun -Workflow $wf -Port $Port -TimeoutSec $TimeoutSec
+    $res = Invoke-VidValidationRun -Workflow $wf -Port $Port -TimeoutSec $TimeoutSec -WorkflowDir $WorkflowDir
     if (-not $res.Ok) { throw ('clip ' + $spec.Index + ' failed: ' + $res.Error) }
     $after = @(Get-ChildItem $OutputDir -Filter 'vidtuner*.mp4' | ForEach-Object { $_.FullName })
     $fresh = @($after | Where-Object { $before -notcontains $_ })
@@ -105,8 +105,9 @@ function Invoke-VidCompose {
         [string]$Narration, [int]$ClipCount = 3, [int]$Port = 8188, [int]$TimeoutSec = 7200)
   $timeline = @(New-VidComposeTimeline -ClipCount $ClipCount -Prompt $Prompt -BaseSeed (Get-VidRunSeed (Get-Date)))
   $outDir = Join-Path $EngineRoot 'ComfyUI\output'
+  $wfDir = Join-Path $Root 'runtime\workflows'
   $pieces = @(Invoke-VidClipBatch -Timeline $timeline -Tier $Tier -Inv $Inv -OutputDir $outDir `
-      -Port $Port -TimeoutSec $TimeoutSec)
+      -Port $Port -TimeoutSec $TimeoutSec -WorkflowDir $wfDir)
   $wav = New-VidVoiceoverWav -Text $Narration -WavPath (Join-Path $Root 'runtime\voiceover.wav')
   $out = Join-Path $outDir ('vidtuner_story_' + (Get-Date -Format 'yyyyMMdd_HHmmss') + '.mp4')
   $final = Join-VidFinalVideo -Clips $pieces -WavPath $wav -OutPath $out

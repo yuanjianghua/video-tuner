@@ -48,6 +48,8 @@ tune.ps1 -EngineDir D:\x        # 指定已有 ComfyUI 便携版
 tune.ps1 -NoDownload            # 全离线：只报告现状
 ```
 
+每次向 ComfyUI 提交前，工具会把完整 API 工作流（prompt + client_id）自动保存到 `runtime\workflows\vidtuner_clipapi_*.json`，可据此复现/重跑；这是 API 格式，不是 ComfyUI 界面里的节点画布文件。
+
 ## 常见问题
 
 - **GitHub 下载慢/断**：引擎包 8 段并行 + 每段断点续传，失败会重试并切换线路；仍失败就去 releases 页手动下载 `.7z` 解压，`-EngineDir` 指过去。模型优先 ModelScope，其次 HF 镜像。
@@ -63,9 +65,10 @@ tune.ps1 -NoDownload            # 全离线：只报告现状
 
 ## Status
 
-- [x] 档位阶梯 / 工作流构建 / 下载器 / 验证降档 / 一键脚本 / 多段合并配音 —— 离线测试 146 项全绿（arch 64 + smoke 82）
+- [x] 档位阶梯 / 工作流构建 / 下载器 / 验证降档 / 一键脚本 / 多段合并配音 / 工作流落盘 —— 离线测试 148 项全绿（arch 64 + smoke 84）
 - [x] 真实机器端到端实测（2026-11-25，详见下方与 `tuning_report.txt`）
 - [x] `-Compose` 完整小短片：3 段 720p 短片 → ffmpeg 合并 → 中文 SAPI 旁白（本机已验证 TTS+合并出片）
+- [x] 每次生成前把 API 工作流 JSON 保存到 `runtime\workflows\`（可复现，非 UI 节点画布文件）
 
 ### 真机实测（2026-11-25）
 

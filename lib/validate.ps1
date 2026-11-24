@@ -125,11 +125,12 @@ function Select-VidReadyTier([object]$Plan, [object]$Inv) {
 
 # One validation attempt -> @{ Ok; Seconds; Error }; never throws, OOM comes back as data to downgrade.
 function Invoke-VidValidationRun {
-  param([object]$Workflow, [int]$Port = 8188, [int]$TimeoutSec = 1800)
+  param([object]$Workflow, [int]$Port = 8188, [int]$TimeoutSec = 1800, [string]$WorkflowDir = '')
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   $base = Get-VidEngineBaseUrl $Port
   $clientId = [guid]::NewGuid().ToString()
   $body = @{ prompt = $Workflow; client_id = $clientId } | ConvertTo-Json -Depth 20
+  if ($WorkflowDir) { Write-VidLog ('  workflow saved: ' + (Save-VidWorkflowJson -Workflow $Workflow -Dir $WorkflowDir -Tag 'clipapi' -ClientId $clientId)) }
   $sw = [Diagnostics.Stopwatch]::StartNew()
   try {
     $r = Invoke-RestMethod -Uri ($base + '/prompt') -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 30
@@ -179,7 +180,7 @@ function Test-VidErrorIsMemory([string]$Err) {
 # Try planned tier; on memory failure walk the ladder. Returns @{ Ok; Tier; Attempts; Seconds }.
 function Invoke-VidValidatePlan {
   param([object]$Plan, [object]$Inv, [string]$EngineRoot, [int]$Port = 8188,
-        [bool]$StopEngineAfter = $false, [int]$TimeoutSec = 1800)
+        [bool]$StopEngineAfter = $false, [int]$TimeoutSec = 1800, [string]$WorkflowDir = '')
   $tiers = Get-VidTiers
   $idx = Get-VidTierIndexById $plan.Pick.Id
   if ($idx -lt 0) { throw 'plan tier missing from ladder' }
@@ -194,7 +195,7 @@ function Invoke-VidValidatePlan {
       $attempts += @{ Tier = $t.Id; Ok = $false; Error = 'build: ' + $_.Exception.Message }
       continue
     }
-    $res = Invoke-VidValidationRun -Workflow $wf -Port $Port -TimeoutSec $TimeoutSec
+    $res = Invoke-VidValidationRun -Workflow $wf -Port $Port -TimeoutSec $TimeoutSec -WorkflowDir $WorkflowDir
     $attempts += @{ Tier = $t.Id; Ok = $res.Ok; Seconds = $res.Seconds; Error = $res.Error }
     if ($res.Ok) {
       Write-VidLog ('  OK in ' + $res.Seconds + 's (reduced proof run; full clip scales ~frames x steps)')
@@ -213,7 +214,7 @@ function Invoke-VidValidatePlan {
 
 # Full generation at validated settings; hours-long timeout because 14B honestly takes hours.
 function Start-VidFullGeneration {
-  param([object]$Plan, [object]$Inv, [string]$Prompt, [int]$Port = 8188, [int]$TimeoutSec = 21600)
+  param([object]$Plan, [object]$Inv, [string]$Prompt, [int]$Port = 8188, [int]$TimeoutSec = 21600, [string]$WorkflowDir = '')
   $t = $Plan.Pick
   $ck = @(Select-VidCkptForTier $t $Inv)
   if (-not $ck) { throw ('no checkpoint for tier ' + $t.Id) }
@@ -238,7 +239,7 @@ function Start-VidFullGeneration {
     -Shift $t.Shift -Fps $t.Fps -Sampler $t.Sampler -LoraHigh $lora.High -LoraLow $lora.Low
   Write-VidLog ('full run: ' + $t.Model + ' ' + $t.Res + ' ' + $t.Frames + ' frames x ' + $steps + ' steps cfg ' + $cfg)
   Write-VidLog ('  expectation: ' + (Get-VidExpectation $t))
-  $res = Invoke-VidValidationRun -Workflow $wf -Port $Port -TimeoutSec $TimeoutSec
+  $res = Invoke-VidValidationRun -Workflow $wf -Port $Port -TimeoutSec $TimeoutSec -WorkflowDir $WorkflowDir
   if ($res.Ok) {
     Write-VidLog ('  done in ' + [int]($res.Seconds / 60) + ' min. Output: ComfyUI\output\vidtuner_*.mp4')
   } else {

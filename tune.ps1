@@ -111,14 +111,14 @@ try {
     Start-VidEngine -EngineRoot $engineRoot -Port $Port -VramMB ([int]$gpu.TotalMB) | Out-Null
     if (-not $cached -and -not $SkipValidate) {
       Write-VidLog 'no validated plan for this hardware+model: validating first (a real generation is cheaper to lose than hours)...'
-      $vr = Invoke-VidValidatePlan -Plan $plan -Inv $inv -EngineRoot $engineRoot -Port $Port
+      $vr = Invoke-VidValidatePlan -Plan $plan -Inv $inv -EngineRoot $engineRoot -Port $Port -WorkflowDir (Join-Path $root 'runtime\workflows')
       if (-not $vr.Ok) { foreach ($a in $vr.Attempts) { Write-VidLog ('  attempt ' + $a.Tier + ': ' + $(if ($a.Ok) { 'ok' } else { $a.Error })) }
         throw 'validation failed on every tier - see README hardware floor and manual fallback' }
       $plan | Add-Member -Force NoteProperty Pick $vr.Tier
       Set-VidPlanState $root $plan $true ('validated ' + $vr.Tier.Id)
     }
     if (-not $Prompt) { throw '-Generate needs -Prompt "..."' }
-    Start-VidFullGeneration -Plan $plan -Inv $inv -Prompt $Prompt -Port $Port | Out-Null
+    Start-VidFullGeneration -Plan $plan -Inv $inv -Prompt $Prompt -Port $Port -WorkflowDir (Join-Path $root 'runtime\workflows') | Out-Null
   } elseif ($cached -and -not $Force) {
     Write-VidLog 'reusing validated plan (hardware and model unchanged; -Force to revalidate)'
   } elseif ($SkipValidate) {
@@ -134,7 +134,7 @@ try {
       Write-VidLog '       GGUF checkpoints need the ComfyUI-GGUF custom node pack: install ComfyUI-Manager then "Install (GGUF)".'
       throw 'missing custom nodes'
     }
-    $vr = Invoke-VidValidatePlan -Plan $plan -Inv $inv -EngineRoot $engineRoot -Port $Port
+    $vr = Invoke-VidValidatePlan -Plan $plan -Inv $inv -EngineRoot $engineRoot -Port $Port -WorkflowDir (Join-Path $root 'runtime\workflows')
     if (-not $vr.Ok) { foreach ($a in $vr.Attempts) { Write-VidLog ('  attempt ' + $a.Tier + ': ' + $(if ($a.Ok) { 'ok' } else { $a.Error })) }
       Write-VidLog 'HINT: repeated CUDA OOM on the 17-frame proof run usually means pagefile/RAM pressure - close big apps or enlarge the pagefile.'
       throw 'validation failed on every tier' }
