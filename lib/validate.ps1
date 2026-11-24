@@ -4,6 +4,12 @@
 # (weights load -> text encode -> denoise -> VAE decode -> save image) and exposes OOM within
 # minutes instead of hours. Dry-run mode (-SkipValidate) must NEVER stop a running engine.
 
+# Get-VidTiers() rebuilds objects per call; match a plan's tier by stable Id, not reference.
+function Get-VidTierIndexById([string]$Id) {
+  $tiers = Get-VidTiers
+  for ($i = 0; $i -lt $tiers.Count; $i++) { if ($tiers[$i].Id -eq $Id) { return $i } }
+  return -1
+}
 function Get-VidEngineBaseUrl([int]$Port) { return ('http://127.0.0.1:' + $Port) }
 
 function Test-VidEngineHealth([int]$Port) {
@@ -97,8 +103,7 @@ function Select-VidCkptForTier([object]$Tier, [object]$Inv) {
   return $pool
 }
 
-# Wan 2.2 5B latents need the 2.2 vae; 1.3B and 14B use the 2.1 vae. WRONG VAES SILENTLY
-# PRODUCE GARBAGE, so this is pairing, not preference: no match -> $null -> caller errors.
+# Wan 2.2 5B needs the 2.2 vae; 1.3B/14B use 2.1. WRONG VAE = garbage: hard pairing, no match -> null.
 function Select-VidVaeForTier([object]$Tier, [object]$Inv) {
   $want = '2\.1'
   if ($Tier.Kind -eq 'wan22-5b') { $want = '2\.2' }
@@ -107,11 +112,9 @@ function Select-VidVaeForTier([object]$Tier, [object]$Inv) {
   return $hit
 }
 
-# Pick the best hardware-fitting tier that ALSO has every file on disk (weights+clip+vae).
-# Candidates are tried best-first; returns $null when nothing is runnable yet.
+# Best hardware-fitting tier that ALSO has every file on disk; best-first, null if none runnable.
 function Select-VidReadyTier([object]$Plan, [object]$Inv) {
-  $tiers = Get-VidTiers
-  $cands = @($Plan.All | Sort-Object @{e = { $tiers.IndexOf($_.Tier) } } -Descending | ForEach-Object { $_.Tier })
+  $cands = @($Plan.All | Sort-Object @{e = { Get-VidTierIndexById $_.Tier.Id } } -Descending | ForEach-Object { $_.Tier })
   foreach ($t in $cands) {
     if (-not $Inv.Clips.Count -or -not $Inv.Vaes.Count) { continue }
     if (@(Select-VidCkptForTier $t $Inv).Count) { return $t }
@@ -119,8 +122,7 @@ function Select-VidReadyTier([object]$Plan, [object]$Inv) {
   return $null
 }
 
-# One validation attempt. Returns @{ Ok; Seconds; Error }. Never throws on generation failure:
-# OOM must come back as data so the caller can downgrade.
+# One validation attempt -> @{ Ok; Seconds; Error }; never throws, OOM comes back as data to downgrade.
 function Invoke-VidValidationRun {
   param([object]$Workflow, [int]$Port = 8188, [int]$TimeoutSec = 1800)
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -179,8 +181,7 @@ function Test-VidErrorIsMemory([string]$Err) {
 function Invoke-VidValidatePlan {
   param([object]$Plan, [object]$Inv, [string]$EngineRoot, [int]$Port = 8188,
         [bool]$StopEngineAfter = $false, [int]$TimeoutSec = 1800)
-  $tiers = Get-VidTiers
-  $idx = $tiers.IndexOf($plan.Pick)
+  $idx = Get-VidTierIndexById $plan.Pick.Id
   if ($idx -lt 0) { throw 'plan tier missing from ladder' }
   $candidates = @($idx) + @(Get-VidDowngradeOrder $idx)
   $attempts = @()

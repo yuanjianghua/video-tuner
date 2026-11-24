@@ -56,6 +56,11 @@ try {
   Assert-Ok (($dg -join ',') -eq '2,1,0') 'downgrade ladder from index 3 is 2,1,0'
   Assert-Throws { Get-VidDowngradeOrder 9 } 'bad tier index rejected'
 
+  # Get-VidTiers() rebuilds its objects on every call; a plan holds tiers from an older call.
+  Assert-Ok ((Get-VidTierIndexById 'T0') -eq 0) 'tier index by Id: T0 = 0'
+  Assert-Ok ((Get-VidTierIndexById 'T2') -eq 2) 'tier index by Id works across Get-VidTiers calls'
+  Assert-Ok ((Get-VidTierIndexById 'NOPE') -eq -1) 'unknown tier Id = -1'
+
   # ---------- workflows: structural rules ----------
   Assert-Throws { New-VidWorkflowT2V -CkptName '' -ClipName c -VaeName v -Prompt p } 'empty ckpt name rejected'
   Assert-Throws { New-VidWorkflowT2V -CkptName a.gguf -ClipName c -VaeName v -Prompt p -Frames 80 } 'frames 80 rejected ((n-1)%4 rule)'
