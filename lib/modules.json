@@ -1,0 +1,15 @@
+{
+  "_comment": "video-tuner: manifest is the single source of truth for load order + allowed deps (tests/arch.ps1 enforces discovered==declared, same discipline as llama-tuner).",
+  "modules": [
+    { "name": "load",      "file": "load.ps1",      "deps": [] },
+    { "name": "common",    "file": "common.ps1",    "deps": [] },
+    { "name": "sysinfo",   "file": "sysinfo.ps1",   "deps": [] },
+    { "name": "plan",      "file": "plan.ps1",      "deps": [], "pure": true },
+    { "name": "state",     "file": "state.ps1",     "deps": [] },
+    { "name": "workflows", "file": "workflows.ps1", "deps": [], "pure": true },
+    { "name": "discover",  "file": "discover.ps1",  "deps": ["workflows"] },
+    { "name": "install",   "file": "install.ps1",   "deps": ["common", "discover"] },
+    { "name": "validate",  "file": "validate.ps1",  "deps": ["common", "plan", "workflows"] },
+    { "name": "launcher",  "file": "launcher.ps1",  "deps": ["common"] }
+  ]
+}

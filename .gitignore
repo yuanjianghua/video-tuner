@@ -1,0 +1,7 @@
+# local artifacts, never commit
+config.json
+tuning_report.txt
+runtime/
+ComfyUI/
+output/
+*.log
