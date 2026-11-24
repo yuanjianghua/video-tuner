@@ -152,7 +152,7 @@ function Invoke-VidDownloadParallel {
     if ($s -ge $size) { break }
     $e = [long][math]::Min($s + $chunk - 1, $size - 1)
     $p = Join-Path (Split-Path $OutFile -Parent) ([IO.Path]::GetFileName($OutFile) + '.part' + $k)
-    $parts += @{ path = $p; start = $s; end = $e; ps = $null; rs = $null; ar = $null }
+    $parts += @{ idx = $k; path = $p; start = $s; end = $e; ps = $null; rs = $null; ar = $null; restarts = 0 }
   }
   Write-VidLog ('    ' + $parts.Count + ' connections, ' + [math]::Round($size / 1MB) + 'MB total')
   $src = Get-VidPartWorkerSource
@@ -175,6 +175,28 @@ function Invoke-VidDownloadParallel {
   while ($true) {
     $bytes = [long]0
     foreach ($p in $parts) { if (Test-Path $p.path) { $bytes += [long](Get-Item $p.path).Length } }
+    foreach ($p in $parts) {
+      if (-not $p.ar.IsCompleted) { continue }
+      $want = [long]$p.end - [long]$p.start + 1
+      $got = [long]0
+      if (Test-Path $p.path) { $got = [long](Get-Item $p.path).Length }
+      if ($got -ge $want -or $p.restarts -ge 12) { continue }
+      $p.restarts++
+      try { [void]$p.ps.EndInvoke($p.ar) } catch {}
+      if ($p.ps) { $p.ps.Dispose() }
+      if ($p.rs) { try { $p.rs.Close() } catch {} }
+      Write-VidLog ('    segment ' + $p.idx + ' stalled at ' + [math]::Round($got / 1MB) + 'MB, restart ' + $p.restarts)
+      $ps2 = [powershell]::Create()
+      $rs2 = [runspacefactory]::CreateRunspace()
+      $rs2.Open()
+      $ps2.Runspace = $rs2
+      [void]$ps2.AddScript($src)
+      [void]$ps2.AddParameter('url', $Url)
+      [void]$ps2.AddParameter('partPath', $p.path)
+      [void]$ps2.AddParameter('start', $p.start)
+      [void]$ps2.AddParameter('end', $p.end)
+      $p.ps = $ps2; $p.rs = $rs2; $p.ar = $ps2.BeginInvoke()
+    }
     $running = @($parts | Where-Object { -not $_.ar.IsCompleted }).Count
     $el = $sw.Elapsed.TotalSeconds
     if ((($el - $lastT) -ge 20) -or ($running -eq 0)) {
