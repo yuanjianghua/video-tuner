@@ -145,6 +145,15 @@ try {
   Assert-Ok ($b8.Stop -notmatch 'taskkill /im python') 'never taskkills bare python.exe'
   $b16 = New-VidLauncherBodies 'D:\Apps\ComfyUI' 8188 16384
   Assert-Ok ($b16.Start -notmatch '--lowvram') '16GB vram card NOT forced to --lowvram'
+
+  # ---------- grounded release snapshot (API-outage fallback) ----------
+  $snapPath = Join-Path $root 'data\engine_release.json'
+  Assert-Ok (Test-Path $snapPath) 'verified engine release snapshot is bundled'
+  $snap = $null
+  try { $snap = ([IO.File]::ReadAllText($snapPath) | ConvertFrom-Json) } catch {}
+  Assert-Ok ($snap -and $snap.tag_name -match '^v\d+\.\d+\.\d+$') 'snapshot has a real release tag'
+  Assert-Ok ($snap -and @($snap.assets).Count -gt 0 -and $snap.assets[0].name -match '\.7z$') 'snapshot has a real portable asset name'
+  Assert-Ok (-not (Select-String -Path $snapPath -Pattern '^\s*#').Count) 'snapshot is pure JSON (no comment lines to break ConvertFrom-Json)'
 } finally {
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

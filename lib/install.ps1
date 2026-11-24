@@ -19,23 +19,32 @@ function Expand-VidArchive7z {
 # the cache is only ever written from a real API response.
 function Get-VidEngineRelease([string]$root) {
   $cache = Join-Path $root 'runtime\engine_release.json'
-  try {
-    $r = Invoke-RestMethod 'https://api.github.com/repos/Comfy-Org/ComfyUI/releases/latest' -TimeoutSec 20
-    if (-not $r.tag_name -or -not @($r.assets).Count) { throw 'unexpected release reply' }
-    New-Item -ItemType Directory -Force -Path (Split-Path $cache -Parent) | Out-Null
-    [IO.File]::WriteAllText($cache, ($r | ConvertTo-Json -Depth 6 -Compress))
-    return $r
-  } catch {
-    Write-VidLog ('  GitHub API unavailable: ' + $_.Exception.Message)
-  }
-  if (Test-Path $cache) {
-    Write-VidLog '  using cached verified release metadata'
+  $bundled = Join-Path $root 'data\engine_release.json'
+  $r = $null
+  # DNS failures here are per-call and brief (observed: attempt 1 fails, attempt 2 works).
+  for ($i = 1; $i -le 5; $i++) {
     try {
-      $r = ([IO.File]::ReadAllText($cache) | ConvertFrom-Json)
-      if ($r.tag_name -and @($r.assets).Count) { return $r }
-    } catch {}
+      $r = Invoke-RestMethod 'https://api.github.com/repos/Comfy-Org/ComfyUI/releases/latest' -TimeoutSec 20
+      if (-not $r.tag_name -or -not @($r.assets).Count) { throw 'unexpected release reply' }
+      New-Item -ItemType Directory -Force -Path (Split-Path $cache -Parent) | Out-Null
+      [IO.File]::WriteAllText($cache, ($r | ConvertTo-Json -Depth 6 -Compress))
+      return $r
+    } catch {
+      Write-VidLog ('  GitHub API attempt ' + $i + ' unavailable: ' + $_.Exception.Message)
+      $r = $null
+      Start-Sleep -Seconds 4
+    }
   }
-  throw 'Cannot reach GitHub API and no cached release metadata. Re-run later or download the portable manually.'
+  foreach ($f in @($cache, $bundled)) {
+    if (Test-Path $f) {
+      Write-VidLog ('  using verified release snapshot: ' + $f)
+      try {
+        $c = ([IO.File]::ReadAllText($f) | ConvertFrom-Json)
+        if ($c.tag_name -and @($c.assets).Count) { return $c }
+      } catch {}
+    }
+  }
+  throw 'Cannot reach GitHub API and no verified release snapshot. Re-run later or download the portable manually.'
 }
 
 function Install-VidEngine([string]$root) {
