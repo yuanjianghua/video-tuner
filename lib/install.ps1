@@ -4,16 +4,57 @@
 # hf-mirror.com works, api/raw.githubusercontent works. So every model file is tried against a
 # host list in order. All file names below were pulled from repo listings, not from memory.
 
+# PS5.1 Invoke-WebRequest buffers the WHOLE response in RAM before writing - fine for a 200MB
+# zip, fatal for a 3.5GB engine (no progress, RAM bloat, restart-from-zero on every stall).
+# So: streaming HttpWebRequest -> FileStream, with Range-based resume and progress every 64MB.
 function Invoke-VidDownload {
-  param([string]$Url, [string]$OutFile, [int]$TimeoutSec = 3600, [int]$Retries = 3)
+  param([string]$Url, [string]$OutFile, [int]$TimeoutSec = 3600, [int]$Retries = 5)
   try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
   New-Item -ItemType Directory -Force -Path (Split-Path $OutFile -Parent) | Out-Null
+  $name = [IO.Path]::GetFileName($OutFile)
   for ($i = 1; $i -le $Retries; $i++) {
+    $req = $null; $resp = $null; $fs = $null; $rs = $null
     try {
-      Write-VidLog ('  downloading (try ' + $i + '): ' + [IO.Path]::GetFileName($OutFile))
-      Invoke-WebRequest $Url -OutFile $OutFile -TimeoutSec $TimeoutSec
-      if ((Get-Item $OutFile).Length -gt 0) { return $true }
-    } catch { Write-VidLog ('    failed: ' + $_.Exception.Message) }
+      $have = 0
+      if (Test-Path $OutFile) { $have = (Get-Item $OutFile).Length }
+      Write-VidLog ('  downloading (try ' + $i + $(if ($have) { ', resume from ' + [math]::Round($have / 1MB) + 'MB' } else { '' }) + '): ' + $name)
+      $req = [System.Net.HttpWebRequest]::Create($Url)
+      $req.Timeout = 30000
+      $req.ReadWriteTimeout = 60000
+      $req.UserAgent = 'video-tuner'
+      if ($have -gt 0) { $req.AddRange($have) }
+      $resp = $req.GetResponse()
+      $status = [int]$resp.StatusCode
+      if ($have -gt 0 -and $status -ne 206) { $have = 0 }   # server ignored Range: restart clean
+      $fs = [IO.File]::Open($OutFile, $(if ($status -eq 206) { [IO.FileMode]::Append } else { [IO.FileMode]::Create }))
+      $total = -1
+      try { if ($resp.ContentLength -ge 0) { $total = $resp.ContentLength + $have } } catch {}
+      $rs = $resp.GetResponseStream()
+      $buf = New-Object byte[] 262144
+      $sinceReport = 0
+      while ($true) {
+        $n = $rs.Read($buf, 0, $buf.Length)
+        if ($n -le 0) { break }
+        $fs.Write($buf, 0, $n)
+        $have += $n; $sinceReport += $n
+        if ($sinceReport -ge 67108864) {
+          $msg = '    ... ' + [math]::Round($have / 1MB) + 'MB'
+          if ($total -gt 0) { $msg += '/' + [math]::Round($total / 1MB) + 'MB (' + [math]::Round(100.0 * $have / $total) + '%)' }
+          Write-VidLog $msg
+          $sinceReport = 0
+        }
+      }
+      $rs.Close(); $rs = $null; $fs.Close(); $fs = $null; $resp.Close(); $resp = $null
+      $size = (Get-Item $OutFile).Length
+      if ($size -gt 0 -and ($total -lt 0 -or $size -ge $total)) { return $true }
+      Write-VidLog ('    incomplete (' + [math]::Round($size / 1MB) + '/' + [math]::Round($total / 1MB) + 'MB), will resume')
+    } catch {
+      Write-VidLog ('    stalled: ' + $_.Exception.Message)
+    } finally {
+      if ($rs) { $rs.Close() }
+      if ($fs) { $fs.Close() }
+      if ($resp) { $resp.Close() }
+    }
     Start-Sleep -Seconds (5 * $i)
   }
   return $false
@@ -21,6 +62,37 @@ function Invoke-VidDownload {
 
 # resolve-first across mirrors; $relPaths entries: @{repo; path; dir}
 function Get-VidDownloadHosts { return @('https://hf-mirror.com', 'https://huggingface.co') }
+
+# GitHub release/zip downloads are intermittently throttled HERE (verified 2026-11-24: direct
+# timed out at 15s while gh-proxy.com/ghfast.top both answered instantly). A third-party
+# accelerator could tamper with bytes, so we still TRY direct first - but with a short probe
+# timeout so a blocked direct route costs 15 seconds, not an hour.
+function Get-VidGithubProxies { return @('https://gh-proxy.com/', 'https://ghfast.top/') }
+
+function Test-VidUrlAlive([string]$Url) {
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $req = [Net.HttpWebRequest]::Create($Url)
+    $req.Method = 'GET'
+    $req.AddRange(0, 63)
+    $req.Timeout = 15000
+    $req.UserAgent = 'video-tuner'
+    $resp = $req.GetResponse()
+    $resp.Close()
+    return $true
+  } catch { return $false }
+}
+
+function Invoke-VidDownloadGithub {
+  param([string]$Url, [string]$OutFile, [string]$Canonical = '')
+  $alt = if ($Canonical) { $Canonical } else { $Url }
+  if ((Test-VidUrlAlive $Url) -and (Invoke-VidDownload $Url $OutFile)) { return $true }
+  foreach ($p in @(Get-VidGithubProxies)) {
+    Write-VidLog ('  using accelerator ' + $p.Split('/')[2])
+    if (Invoke-VidDownload ($p + $alt) $OutFile) { return $true }
+  }
+  return $false
+}
 
 function Invoke-VidDownloadRepoFile {
   param([string]$Repo, [string]$Path, [string]$OutFile)
@@ -58,7 +130,10 @@ function Install-VidEngine([string]$root) {
   $asset = $asset[0]
   $tmp = Join-Path $root 'runtime\dl'
   $z = Join-Path $tmp $asset.name
-  if (-not (Invoke-VidDownload $asset.browser_download_url $z)) {
+  # canonical github.com URL for the accelerators (browser_download_url is objects.githubusercontent,
+  # which most prefix proxies do NOT relay)
+  $canon = 'https://github.com/Comfy-Org/ComfyUI/releases/download/' + $rel.tag_name + '/' + $asset.name
+  if (-not (Invoke-VidDownloadGithub $asset.browser_download_url $z $canon)) {
     throw ('Download failed. Get "' + $asset.name + '" manually, unpack, and re-run with -EngineDir <folder>.')
   }
   Write-VidLog '  extracting (a few minutes)...'
@@ -83,7 +158,8 @@ function Install-VidGgufPack([string]$engineRoot) {
   Write-VidLog 'installing ComfyUI-GGUF custom node pack (needed for GGUF weights)...'
   $tmp = Join-Path $engineRoot 'runtime\dl'
   $z = Join-Path $tmp 'ComfyUI-GGUF.zip'
-  if (-not (Invoke-VidDownload 'https://codeload.github.com/city96/ComfyUI-GGUF/zip/refs/heads/main' $z 600)) {
+  if (-not (Invoke-VidDownloadGithub 'https://codeload.github.com/city96/ComfyUI-GGUF/zip/refs/heads/main' $z `
+      'https://github.com/city96/ComfyUI-GGUF/archive/refs/heads/main.zip')) {
     throw 'cannot fetch ComfyUI-GGUF. Manual: download zip from github.com/city96/ComfyUI-GGUF, unpack into ComfyUI\custom_nodes\ComfyUI-GGUF'
   }
   $ex = Join-Path $tmp 'ggufpack'
