@@ -14,6 +14,30 @@ function Expand-VidArchive7z {
   } finally { Set-Location $prev }
 }
 
+# GitHub's API is intermittent here (actual DNS resolution failure seen 2026-11-24), so a
+# successful, verified reply is cached and reused during outages. Never a made-up file name:
+# the cache is only ever written from a real API response.
+function Get-VidEngineRelease([string]$root) {
+  $cache = Join-Path $root 'runtime\engine_release.json'
+  try {
+    $r = Invoke-RestMethod 'https://api.github.com/repos/Comfy-Org/ComfyUI/releases/latest' -TimeoutSec 20
+    if (-not $r.tag_name -or -not @($r.assets).Count) { throw 'unexpected release reply' }
+    New-Item -ItemType Directory -Force -Path (Split-Path $cache -Parent) | Out-Null
+    [IO.File]::WriteAllText($cache, ($r | ConvertTo-Json -Depth 6 -Compress))
+    return $r
+  } catch {
+    Write-VidLog ('  GitHub API unavailable: ' + $_.Exception.Message)
+  }
+  if (Test-Path $cache) {
+    Write-VidLog '  using cached verified release metadata'
+    try {
+      $r = ([IO.File]::ReadAllText($cache) | ConvertFrom-Json)
+      if ($r.tag_name -and @($r.assets).Count) { return $r }
+    } catch {}
+  }
+  throw 'Cannot reach GitHub API and no cached release metadata. Re-run later or download the portable manually.'
+}
+
 function Install-VidEngine([string]$root) {
   Write-VidLog 'ComfyUI portable not found - downloading official Windows portable from GitHub...'
   $dest = Join-Path $root 'ComfyUI'
@@ -22,7 +46,7 @@ function Install-VidEngine([string]$root) {
   if ($free -ge 0 -and $free -lt 25) {
     Write-VidLog ('WARNING: only ' + $free + ' GB free on this volume; engine is ~15 GB after extraction.')
   }
-  $rel = Invoke-RestMethod 'https://api.github.com/repos/Comfy-Org/ComfyUI/releases/latest' -TimeoutSec 30
+  $rel = Get-VidEngineRelease $root
   $asset = @($rel.assets | Where-Object { $_.name -match 'windows_portable.*nvidia.*\.7z$' } | Select-Object -First 1)
   if (-not $asset) { $asset = @($rel.assets | Where-Object { $_.name -match 'windows_portable.*\.7z$' } | Select-Object -First 1) }
   if (-not $asset) { throw 'No portable asset in latest release. Download manually: https://github.com/Comfy-Org/ComfyUI/releases' }
@@ -32,7 +56,8 @@ function Install-VidEngine([string]$root) {
   # canonical github.com URL for the accelerators (browser_download_url is objects.githubusercontent,
   # which most prefix proxies do NOT relay)
   $canon = 'https://github.com/Comfy-Org/ComfyUI/releases/download/' + $rel.tag_name + '/' + $asset.name
-  if (-not (Invoke-VidDownloadGithub $asset.browser_download_url $z $canon)) {
+  $dl = if ($asset.browser_download_url) { $asset.browser_download_url } else { $canon }
+  if (-not (Invoke-VidDownloadGithub $dl $z $canon)) {
     throw ('Download failed. Get "' + $asset.name + '" manually, unpack, and re-run with -EngineDir <folder>.')
   }
   Write-VidLog '  extracting (a few minutes)...'
