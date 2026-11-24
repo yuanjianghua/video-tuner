@@ -1,8 +1,6 @@
 # lib/validate.ps1 - REAL end-to-end proof: start engine, run a reduced generation, measure.
-# Philosophy copied from llama-tuner: never trust a plan we have not booted. A validation run is
-# a REAL Wan generation at reduced cost (17 frames / few steps) - it proves the whole chain
-# (weights load -> text encode -> denoise -> VAE decode -> save image) and exposes OOM within
-# minutes instead of hours. Dry-run mode (-SkipValidate) must NEVER stop a running engine.
+# Never trust an unbooted plan: a real reduced Wan run proves the whole chain and exposes OOM
+# in minutes, not hours. Dry-run (-SkipValidate) must NEVER stop a running engine.
 
 # Get-VidTiers() rebuilds objects per call; match a plan's tier by stable Id, not reference.
 function Get-VidTierIndexById([string]$Id) {
@@ -143,9 +141,10 @@ function Invoke-VidValidationRun {
     Start-Sleep -Seconds 5
     $q = $null
     try { $q = Invoke-RestMethod ($base + '/queue') -TimeoutSec 10 } catch { continue }
-    $running = @($q.running | ForEach-Object { $_ })
-    $runningIds = @($running | ForEach-Object { [string]$_[0] })
-    if ($runningIds -notcontains $pid_) {
+    # ComfyUI /queue returns queue_running + queue_pending (NOT running/pending); a null
+    # field piped into ForEach-Object yields one null element, and $_[0] then throws.
+    $busy = @(@($q.queue_running) + @($q.queue_pending) | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_[0] })
+    if ($busy -notcontains $pid_) {
       try {
         $h = Invoke-RestMethod ($base + '/history/' + $pid_) -TimeoutSec 10
       } catch { $lastErr = $_.Exception.Message; continue }

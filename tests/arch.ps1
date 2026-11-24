@@ -115,6 +115,10 @@ $tune = Get-Content (Join-Path $root 'tune.ps1') -Raw
 Assert-Ok ((($tune -split "`r?`n").Count) -le 200) ('tune.ps1 stays thin (' + (($tune -split "`r?`n").Count) + ' lines)')
 Assert-Ok (-not ($tune -match '(?im)^[ \t]*function[ \t]+')) 'entry script defines no logic functions'
 
+# ---------- engine API field names (typo here null-indexes during validation) ----------
+$vtext = (@($mods | Where-Object { $_.File -eq 'validate.ps1' }))[0].Text
+Assert-Ok ($vtext -match 'queue_running' -and $vtext -match 'queue_pending') 'validate reads ComfyUI queue_running/queue_pending fields'
+
 # ---------- graph summary ----------
 Write-Host ''
 Write-Host 'Dependency graph (discovered == declared):'
